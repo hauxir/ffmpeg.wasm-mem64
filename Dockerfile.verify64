@@ -1,0 +1,17 @@
+# Runs tests/mem64-verify.cjs against the built wasm64 core on a Node whose V8
+# is new enough for the finalized Memory64 (64-bit memory AND 64-bit tables),
+# i.e. V8 >= ~13.x (Chrome 133+/Firefox 134+, early 2025). The Node bundled with
+# emsdk and many host Nodes are older and can load 64-bit memory but not 64-bit
+# tables, so verification needs a recent runtime.
+#
+#   make verify-64
+#
+# The node step is the image CMD (run via `docker run`), NOT a build RUN, so the
+# potentially-slow encodes execute on the normal docker engine and aren't
+# subject to the buildkit build-session deadline.
+FROM node:24-slim
+WORKDIR /app
+COPY packages/core-64/package.json ./packages/core-64/package.json
+COPY packages/core-64/dist ./packages/core-64/dist
+COPY tests/mem64-verify.cjs ./tests/mem64-verify.cjs
+CMD ["node", "tests/mem64-verify.cjs"]
