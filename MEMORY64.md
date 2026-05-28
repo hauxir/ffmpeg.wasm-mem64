@@ -100,26 +100,35 @@ and reject it, so `make verify-64` runs it inside `node:24` (see
 ## Runtime codec status
 
 All 15 libraries **compile and link** as wasm64 (build parity is complete).
-At *runtime* in the single-thread core, `node tests/mem64-verify.cjs` (run on
-node:24) currently reports:
+`make verify-64` (runs on node:24) reports the following at runtime in the
+single-thread core:
 
-| codec            | runtime | note |
-|------------------|---------|------|
-| H.264 (libx264)  | ✅ works | |
-| VP9 (libvpx)     | ✅ works | |
-| WebP (libwebp)   | ✅ works | |
-| MP3 (libmp3lame) | ✅ works | |
-| Opus (libopus)   | ✅ works | |
-| Vorbis (libvorbis)| ✅ works | |
-| HEVC (libx265)   | ⚠️ hangs | spins inside `x265_encoder_encode` even fully serialized (`pools=none`); links fine |
-| Theora (libtheora)| ⚠️ traps | `null function or function signature mismatch` (a wasm function-pointer typing trap) |
-| zimg `zscale`    | ⚠️ errors | throws during filter init |
+**Encoders**
 
-The three ⚠️ libraries are the most complex C/C++ in the set and have genuine
-*runtime* memory64 issues (function-pointer signature mismatches / hangs) that
-don't appear in the wasm32 build. They are linked and available, but need
-per-library debugging to run. The common codec path (H.264/VP9/WebP +
-MP3/Opus/Vorbis) is fully working.
+| encoder            | runtime | note |
+|--------------------|---------|------|
+| H.264 (libx264)    | ✅ works | |
+| AAC (FFmpeg native)| ✅ works | + H.264+AAC → mp4 mux verified |
+| VP9 (libvpx)       | ✅ works | |
+| WebP (libwebp)     | ✅ works | |
+| MP3 (libmp3lame)   | ✅ works | |
+| Opus (libopus)     | ✅ works | |
+| Vorbis (libvorbis) | ✅ works | |
+| HEVC (libx265)     | ⚠️ hangs | spins inside `x265_encoder_encode` even fully serialized (`pools=none`); links fine |
+| Theora (libtheora) | ⚠️ traps | `null function or function signature mismatch` (a wasm function-pointer typing trap) |
+| zimg `zscale`      | ⚠️ errors | throws during filter init |
+
+**Decoders** — decoding uses FFmpeg's *native* decoders (built-in C in
+libavcodec), **not** the external encoder libs, so it is broadly available and
+unaffected by the three broken encoders. Verified: AAC, MP3, H.264, VP9 decode
+(encode → decode round-trip). The same native code path covers FFmpeg's other
+built-in decoders (HEVC, VP8, FLAC, …), so e.g. HEVC *playback* works even
+though the HEVC *encoder* (x265) does not.
+
+The three ⚠️ encoders are the most complex C/C++ in the set and have genuine
+*runtime* memory64 issues that don't appear in the wasm32 build; they are linked
+and available but need per-library debugging to encode. Everything else —
+including the common transcode path (decode anything → H.264/AAC mp4) — works.
 
 ## Caveats / next steps
 
