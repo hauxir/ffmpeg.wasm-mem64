@@ -17,7 +17,44 @@ node tests/mem64-verify.cjs      # prove it's 64-bit and run real ffmpeg command
 ```
 
 `make prd-64` is the wasm64 analogue of `make prd`. The output lands in
-`packages/core-64/` (package `@ffmpeg/core-64`).
+`packages/core-64/` (package `@hauxir/ffmpeg-core-mem64`).
+
+## Using it (published core + Web Workers)
+
+The compiled core is published to **GitHub Packages** as
+`@hauxir/ffmpeg-core-mem64` (the binaries are not committed to git). To install,
+point the `@hauxir` scope at GitHub's registry in `.npmrc`:
+
+```
+@hauxir:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}   # token needs read:packages
+```
+```bash
+npm install @hauxir/ffmpeg-core-mem64
+```
+
+It's a drop-in `@ffmpeg/core` replacement and runs **inside a Web Worker** via
+the stock `@ffmpeg/ffmpeg` loader (the core is built `-sENVIRONMENT=worker` and
+its bind.js API is unchanged). Both `dist/umd` (classic worker / `importScripts`)
+and `dist/esm` (module worker) are shipped.
+
+```js
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { toBlobURL } from "@ffmpeg/util";
+
+const base = "/node_modules/@hauxir/ffmpeg-core-mem64/dist/umd";
+const ffmpeg = new FFmpeg();                       // spawns a Web Worker
+await ffmpeg.load({
+  coreURL: await toBlobURL(`${base}/ffmpeg-core.js`,   "text/javascript"),
+  wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, "application/wasm"),
+});
+await ffmpeg.writeFile("in.mov", await fetchFile(file));
+await ffmpeg.exec(["-i", "in.mov", "-c:v", "libx264", "-c:a", "aac", "out.mp4"]);
+const out = await ffmpeg.readFile("out.mp4");
+```
+
+Requirements: a **Memory64-capable browser** (Chrome/Edge 133+, Firefox 134+).
+No COOP/COEP headers are needed for this single-thread core (no SharedArrayBuffer).
 
 ## What "supporting memory64" required
 
