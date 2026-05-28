@@ -97,6 +97,30 @@ Note: the artifact uses 64-bit *tables* (table64), so it needs V8 ≥ ~13
 and reject it, so `make verify-64` runs it inside `node:24` (see
 `Dockerfile.verify64`).
 
+## Runtime codec status
+
+All 15 libraries **compile and link** as wasm64 (build parity is complete).
+At *runtime* in the single-thread core, `node tests/mem64-verify.cjs` (run on
+node:24) currently reports:
+
+| codec            | runtime | note |
+|------------------|---------|------|
+| H.264 (libx264)  | ✅ works | |
+| VP9 (libvpx)     | ✅ works | |
+| WebP (libwebp)   | ✅ works | |
+| MP3 (libmp3lame) | ✅ works | |
+| Opus (libopus)   | ✅ works | |
+| Vorbis (libvorbis)| ✅ works | |
+| HEVC (libx265)   | ⚠️ hangs | spins inside `x265_encoder_encode` even fully serialized (`pools=none`); links fine |
+| Theora (libtheora)| ⚠️ traps | `null function or function signature mismatch` (a wasm function-pointer typing trap) |
+| zimg `zscale`    | ⚠️ errors | throws during filter init |
+
+The three ⚠️ libraries are the most complex C/C++ in the set and have genuine
+*runtime* memory64 issues (function-pointer signature mismatches / hangs) that
+don't appear in the wasm32 build. They are linked and available, but need
+per-library debugging to run. The common codec path (H.264/VP9/WebP +
+MP3/Opus/Vorbis) is fully working.
+
 ## Caveats / next steps
 
 * This is a single-thread core. A multi-thread (`pthreads`) wasm64 core is

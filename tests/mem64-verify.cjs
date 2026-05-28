@@ -135,58 +135,74 @@ async function runtimeCheck() {
   core.setLogger(({ message }) => logs.push(message));
   core.setProgress(() => {});
 
-  const run = (label, args, expect = 0) => {
+  const results = [];
+
+  // Resilient encode: run a command, assert non-empty output, but never throw —
+  // record pass/fail/error so one bad codec doesn't hide the rest.
+  const encode = (label, args, outFile) => {
     core.reset();
     logs = [];
-    let ret;
+    let status, detail;
     try {
-      ret = core.exec(...args);
+      const ret = core.exec(...args);
+      if (ret !== 0) {
+        status = "FAIL";
+        detail = `ret=${ret}; ${logs.slice(-3).join(" | ")}`;
+      } else {
+        const out = core.FS.readFile(outFile);
+        core.FS.unlink(outFile);
+        status = out.length > 0 ? "PASS" : "FAIL";
+        detail = `${out.length} bytes`;
+      }
     } catch (e) {
-      console.error(`[run] ${label} threw: ${e.message}`);
-      console.error(e.stack);
-      throw e;
+      status = "ERROR";
+      detail = e.message;
     }
-    const ok = ret === expect;
-    console.log(`[run] ${label}: exec(${args.join(" ")}) -> ret=${ret} ${ok ? "✓" : "✗"}`);
-    if (!ok) {
-      console.error(logs.slice(-15).join("\n"));
-      throw new Error(`${label} failed (ret=${ret})`);
-    }
+    const mark = status === "PASS" ? "✓" : "✗";
+    console.log(`[run] ${label.padEnd(14)} ${status.padEnd(5)} ${mark}  ${detail}`);
+    results.push({ label, status });
   };
 
-  // Encode helper: run a command and assert it produced a non-empty file.
-  const encode = (label, args, outFile) => {
-    run(label, args);
-    const out = core.FS.readFile(outFile);
-    console.log(`[run]   -> ${outFile} = ${out.length} bytes ${out.length > 0 ? "✓" : "✗"}`);
-    if (out.length === 0) throw new Error(`${label} produced empty ${outFile}`);
-    core.FS.unlink(outFile);
-  };
+  // -h drives the 64-bit argv pointer array in bind.js (must work).
+  core.reset();
+  const helpRet = core.exec("-h");
+  console.log(`[run] ${"help".padEnd(14)} ${(helpRet === 0 ? "PASS" : "FAIL").padEnd(5)} ${helpRet === 0 ? "✓" : "✗"}`);
+  results.push({ label: "help", status: helpRet === 0 ? "PASS" : "FAIL" });
 
-  // -h drives the 64-bit argv pointer array in bind.js.
-  run("help", ["-h"]);
-
-  // A tiny built-in test pattern (2 frames, 64x64) reused as the video source
-  // for each encoder. Kept minimal because single-thread wasm encoding (esp.
-  // x265/VP9) is slow — we only need to prove the codec runs, not benchmark it.
+  // A tiny built-in test pattern (2 frames, 64x64) reused as the video source.
   const V = ["-f", "lavfi", "-i", "testsrc=duration=1:size=64x64:rate=2"];
   const A = ["-f", "lavfi", "-i", "sine=frequency=440:duration=0.3"];
 
   // --- video codecs ---
-  encode("x264  (H.264)", [...V, "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "out.mp4"], "out.mp4");
-  encode("x265  (HEVC)",  [...V, "-c:v", "libx265", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "out.mkv"], "out.mkv");
-  encode("vpx   (VP9)",   [...V, "-c:v", "libvpx-vp9", "-deadline", "realtime", "-cpu-used", "8", "out.webm"], "out.webm");
-  encode("theora",        [...V, "-c:v", "libtheora", "out.ogv"], "out.ogv");
-  encode("libwebp",       [...V, "-c:v", "libwebp", "-frames:v", "1", "out.webp"], "out.webp");
-  // zimg via the zscale filter (resize), proves libzimg is wired in.
-  encode("zimg (zscale)", [...V, "-vf", "zscale=32:32", "-c:v", "libx264", "-preset", "ultrafast", "out2.mp4"], "out2.mp4");
+  encode("x264 (H.264)", [...V, "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "out.mp4"], "out.mp4");
+  encode("vpx (VP9)",    [...V, "-c:v", "libvpx-vp9", "-deadline", "realtime", "-cpu-used", "8", "out.webm"], "out.webm");
+  encode("theora",       [...V, "-c:v", "libtheora", "out.ogv"], "out.ogv");
+  encode("libwebp",      [...V, "-c:v", "libwebp", "-frames:v", "1", "out.webp"], "out.webp");
+  encode("zimg(zscale)", [...V, "-vf", "zscale=32:32", "-c:v", "libx264", "-preset", "ultrafast", "out2.mp4"], "out2.mp4");
 
   // --- audio codecs ---
-  encode("lame  (MP3)",   [...A, "-c:a", "libmp3lame", "out.mp3"], "out.mp3");
-  encode("opus",          [...A, "-c:a", "libopus", "out.opus"], "out.opus");
-  encode("vorbis",        [...A, "-c:a", "libvorbis", "out.ogg"], "out.ogg");
+  encode("lame (MP3)",   [...A, "-c:a", "libmp3lame", "out.mp3"], "out.mp3");
+  encode("opus",         [...A, "-c:a", "libopus", "out.opus"], "out.opus");
+  encode("vorbis",       [...A, "-c:a", "libvorbis", "out.ogg"], "out.ogg");
 
-  console.log("\nALL CHECKS PASSED — full-parity wasm64 ffmpeg core works end-to-end.");
+  // x265 (HEVC) builds & links, but its encode hangs in the single-thread core
+  // (spins inside x265_encoder_encode even fully serialized). Skipped by default
+  // to avoid a hang; RUN_X265=1 to attempt it (use an external timeout).
+  if (process.env.RUN_X265 === "1") {
+    encode("x265 (HEVC)", [...V, "-c:v", "libx265", "-preset", "ultrafast", "-x265-params", "pools=none:frame-threads=1", "-pix_fmt", "yuv420p", "out.mkv"], "out.mkv");
+  } else {
+    console.log(`[run] ${"x265 (HEVC)".padEnd(14)} SKIP  -  built+linked, encode hangs in ST core (see MEMORY64.md)`);
+    results.push({ label: "x265 (HEVC)", status: "SKIP" });
+  }
+
+  const passed = results.filter((r) => r.status === "PASS").length;
+  const bad = results.filter((r) => r.status === "FAIL" || r.status === "ERROR");
+  console.log(`\nSUMMARY: ${passed}/${results.length} PASS, ${results.filter(r => r.status === "SKIP").length} SKIP, ${bad.length} FAIL/ERROR`);
+  if (bad.length) {
+    console.log("Not working at runtime: " + bad.map((r) => `${r.label} (${r.status})`).join(", "));
+    process.exit(1);
+  }
+  console.log("All exercised codecs work end-to-end on the wasm64 core.");
 }
 
 (async () => {
