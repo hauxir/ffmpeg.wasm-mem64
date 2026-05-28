@@ -56,6 +56,27 @@ const out = await ffmpeg.readFile("out.mp4");
 Requirements: a **Memory64-capable browser** (Chrome/Edge 133+, Firefox 134+).
 No COOP/COEP headers are needed for this single-thread core (no SharedArrayBuffer).
 
+### Multi-thread variant (`@hauxir/ffmpeg-core-mt-mem64`)
+
+`make prd-mt-64` builds a **multi-thread** wasm64 core (pthreads) → packages
+`core-mt-64`. It links cleanly and the wasm has **shared + 64-bit memory**
+(memory limits flags `0x7`), i.e. a correct shared-memory64 pthreads core.
+
+Trade-offs vs. the single-thread core:
+- **Faster** encodes (x264 and FFmpeg threading use multiple cores).
+- Requires **cross-origin isolation**: serve with `Cross-Origin-Opener-Policy:
+  same-origin` and `Cross-Origin-Embedder-Policy: require-corp` (for
+  `SharedArrayBuffer`). Without those headers it won't load.
+- Loaded the same way via `@ffmpeg/ffmpeg` (it spawns the worker + the pthread
+  pool). emscripten 4.0.x embeds the pthread worker in the main JS, so there is
+  **no separate `ffmpeg-core.worker.js`**.
+
+> Verification note: this core is **build- and structure-verified** (links;
+> shared+64-bit memory confirmed) but its *runtime* was not exercised here —
+> it spawns pthreads via the browser `Worker` API and needs a cross-origin
+> isolated, Memory64-capable browser, which can't be reproduced under Node. Test
+> it in your app. The single-thread core (`core-64`) is fully runtime-verified.
+
 ## What "supporting memory64" required
 
 A wasm module is either entirely wasm32 or entirely wasm64 — you cannot link

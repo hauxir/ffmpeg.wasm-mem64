@@ -1,0 +1,45 @@
+{
+  "name": "@hauxir/ffmpeg-core-mt-mem64",
+  "version": "0.12.10",
+  "description": "FFmpeg WebAssembly version (multi thread, memory64 / wasm64)",
+  "main": "./dist/umd/ffmpeg-core.js",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/ffmpeg-core.js",
+      "require": "./dist/umd/ffmpeg-core.js"
+    },
+    "./wasm": {
+      "import": "./dist/esm/ffmpeg-core.wasm",
+      "require": "./dist/umd/ffmpeg-core.wasm"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hauxir/ffmpeg.wasm-mem64.git"
+  },
+  "keywords": [
+    "ffmpeg",
+    "WebAssembly",
+    "wasm64",
+    "memory64",
+    "multithread",
+    "video",
+    "audio",
+    "transcode"
+  ],
+  "author": "Jerome Wu <jeromewus@gmail.com>",
+  "license": "GPL-2.0-or-later",
+  "bugs": {
+    "url": "https://github.com/hauxir/ffmpeg.wasm-mem64/issues"
+  },
+  "engines": {
+    "node": ">=16.x"
+  },
+  "homepage": "https://github.com/hauxir/ffmpeg.wasm-mem64#readme",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}

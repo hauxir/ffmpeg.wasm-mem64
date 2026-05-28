@@ -11,6 +11,8 @@ PROD_MT_CFLAGS := $(PROD_CFLAGS) $(MT_FLAGS)
 # memory64 (wasm64) build. SIMD is left off for the lean proof-of-concept to
 # keep one fewer variable in play; bump to -O3 -msimd128 once it is stable.
 PROD_64_CFLAGS := -O2
+# memory64 + multithread (pthreads). Adds the same MT flags as the wasm32 MT build.
+PROD_MT_64_CFLAGS := -O2 $(MT_FLAGS)
 
 # Dockerfile used by the generic `build` target; overridden for memory64.
 DOCKERFILE ?= Dockerfile
@@ -50,6 +52,12 @@ build-64:
 		DOCKERFILE=Dockerfile.mem64 \
 		FFMPEG_ST=yes
 
+build-mt-64:
+	make build \
+		PKG_SUFFIX=-mt-64 \
+		DOCKERFILE=Dockerfile.mem64 \
+		FFMPEG_MT=yes
+
 dev:
 	make build-st EXTRA_CFLAGS="$(DEV_CFLAGS)" EXTRA_ARGS="$(DEV_ARGS)"
 
@@ -68,6 +76,10 @@ prd-64:
 
 dev-64:
 	make build-64 EXTRA_CFLAGS="$(PROD_64_CFLAGS) --profiling" EXTRA_ARGS="$(DEV_ARGS)"
+
+# memory64 (wasm64) multi-thread production build -> packages/core-mt-64
+prd-mt-64:
+	make build-mt-64 EXTRA_CFLAGS="$(PROD_MT_64_CFLAGS)"
 
 # Verify the built wasm64 core: confirms 64-bit memory and runs real ffmpeg
 # commands. Uses a Node whose V8 is new enough for finalized Memory64 (64-bit

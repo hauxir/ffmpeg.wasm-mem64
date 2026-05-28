@@ -22,7 +22,9 @@
 FROM emscripten/emsdk:4.0.7 AS emsdk-base
 ARG EXTRA_CFLAGS
 ARG EXTRA_LDFLAGS
-ARG FFMPEG_ST=yes
+# Single-thread (FFMPEG_ST=yes) is set by the `build-64` Make target; the MT
+# path (build-mt-64) sets FFMPEG_MT=yes and leaves FFMPEG_ST empty.
+ARG FFMPEG_ST
 ARG FFMPEG_MT
 ENV INSTALL_DIR=/opt
 ENV FFMPEG_VERSION=n5.1.4
